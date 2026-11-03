@@ -15,15 +15,15 @@ app.innerHTML = `
         <span class="local-note">Local file · no upload</span>
         <button id="theme-toggle" class="button button-subtle" type="button"></button>
         <button id="open-button" class="button" type="button">Open trace…</button>
-        <input id="file-input" type="file" accept=".sqlite,.db,.sqlite3" hidden />
+        <input id="file-input" type="file" hidden />
       </div>
     </header>
 
     <main>
       <section id="empty-state" class="empty-state" aria-label="Open a trace">
         <h1>Open a trace</h1>
-        <p>Drop an Nsight Systems SQLite export here, or choose a file.</p>
-        <button id="drop-button" class="button" type="button">Choose SQLite file…</button>
+        <p>Drop an Nsight Systems SQLite export here, or choose a file.<br />Compressed files (.gz, .zst, .zip, .tar.gz) work too.</p>
+        <button id="drop-button" class="button" type="button">Choose file…</button>
         <small>The database is read in this browser tab.</small>
       </section>
 
@@ -46,6 +46,7 @@ app.innerHTML = `
               <button id="zoom-out" class="icon-button" type="button" title="Zoom out">−</button>
               <button id="zoom-in" class="icon-button" type="button" title="Zoom in">+</button>
               <button id="fit-view" class="button button-subtle" type="button">Fit</button>
+              <button id="measure-mode" class="button button-subtle touch-only" type="button" aria-pressed="false" title="Drag to measure instead of pan">Measure</button>
               <span id="view-range" class="view-range">—</span>
               <span id="selection-summary" class="selection-summary hidden">
                 <strong id="selection-duration">—</strong>
@@ -63,11 +64,11 @@ app.innerHTML = `
             <canvas id="axis-canvas" class="axis-canvas" aria-label="Time axis"></canvas>
           </div>
           <div id="stage-rows" class="stage-rows"></div>
-          <div class="timeline-footer">Drag to measure · drag either edge to adjust · click elsewhere on the timeline or press Esc to clear · Shift+drag or horizontal scroll to pan · pinch or +/− to zoom</div>
+          <div class="timeline-footer"><span class="pointer-only">Drag to measure · drag either edge to adjust · click elsewhere on the timeline or press Esc to clear · Shift+drag or horizontal scroll to pan · pinch or +/− to zoom</span><span class="touch-only">Swipe sideways to pan · pinch to zoom · tap a kernel for details · turn on Measure to drag out a span, then drag its edges to adjust</span></div>
         </div>
 
         <div class="inspector-card">
-          <div class="inspector-title">Kernel details</div>
+          <div class="inspector-title">Kernel details<button id="clear-kernel" class="inspector-close hidden" type="button" aria-label="Clear kernel details" title="Clear kernel details">×</button></div>
           <div id="inspector-content" class="inspector-empty">Click any kernel bar to see its name, duration, device, and stream.</div>
         </div>
 
@@ -158,6 +159,7 @@ let breakdownPending = false;
 let breakdownSort: "name" | "count" | "gpuMs" | "gpuShare" | "avgMs" |
   "wallMs" | "wallShare" | "spanShare" = "gpuMs";
 let breakdownDescending = true;
+let touchMeasure = false;
 
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
 let themeOverride: "light" | "dark" | null = null;
@@ -175,7 +177,12 @@ function isDarkTheme(): boolean {
 function applyTheme(): void {
   const dark = isDarkTheme();
   document.documentElement.dataset.theme = dark ? "dark" : "light";
-  themeToggle.textContent = dark ? "☀ Light mode" : "☾ Dark mode";
+  themeToggle.replaceChildren(dark ? "☀" : "☾");
+  const themeLabel = document.createElement("span");
+  themeLabel.className = "theme-label";
+  themeLabel.textContent = dark ? " Light mode" : " Dark mode";
+  themeToggle.append(themeLabel);
+  themeToggle.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
   const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
   themeColor?.setAttribute("content", dark ? "#22252a" : "#edf0f3");
   refreshKernelColors();
@@ -238,6 +245,10 @@ applyTheme();
 
 const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
 worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+  if (event.data.type === "progress") {
+    announce(event.data.message);
+    return;
+  }
   if (event.data.type === "error") {
     announce(event.data.message, true);
     element<HTMLButtonElement>("#open-button").disabled = false;
@@ -367,16 +378,14 @@ resetTitle.addEventListener("click", () => {
 });
 
 async function openFile(file: File): Promise<void> {
-  if (!/\.(sqlite|sqlite3|db)$/i.test(file.name)) {
-    announce("Choose an Nsight SQLite export (.sqlite, .sqlite3, or .db).", true);
-    return;
-  }
   element<HTMLButtonElement>("#open-button").disabled = true;
   announce(`Opening ${file.name} locally…`);
-  pendingFile = { key: `${file.name}:${file.size}`, name: file.name };
+  // Title the trace after the SQLite file, not its compressed wrapper.
+  const name = file.name.replace(/\.(tar\.gz|tgz|tar\.zst|tzst|tar|gz|zst|zstd|zip)$/i, "") || file.name;
+  pendingFile = { key: `${file.name}:${file.size}`, name };
   try {
     const buffer = await file.arrayBuffer();
-    worker.postMessage({ buffer }, [buffer]);
+    worker.postMessage({ buffer, name: file.name }, [buffer]);
   } catch (error) {
     announce(error instanceof Error ? error.message : String(error), true);
     element<HTMLButtonElement>("#open-button").disabled = false;
@@ -438,9 +447,7 @@ function loadTrace(data: TraceData): void {
   restoreLayout(data.stages.map((stage) => stage.deviceId));
   viewStartMs = 0;
   viewEndMs = data.durationMs;
-  selected = null;
-  inspector.textContent = "Click any kernel bar to see its name, duration, device, and stream.";
-  inspector.className = "inspector-empty";
+  clearInspector();
   emptyState.classList.add("hidden");
   workspace.classList.remove("hidden");
   element<HTMLElement>("#trace-summary").textContent =
@@ -668,9 +675,10 @@ function prepareCanvas(canvas: HTMLCanvasElement): {
   return { context, width: rect.width, height: rect.height };
 }
 
-function tickValues(): number[] {
+function tickValues(width: number): number[] {
   const span = viewEndMs - viewStartMs;
-  const step = niceStep(span / 8);
+  // Roughly one tick per 90px, capped at the desktop density of 8.
+  const step = niceStep(span / Math.max(2, Math.min(8, Math.floor(width / 90))));
   const ticks: number[] = [];
   for (let value = Math.ceil(viewStartMs / step) * step; value <= viewEndMs; value += step) {
     ticks.push(value);
@@ -739,7 +747,7 @@ function drawAxis(): void {
   ctx.fillRect(0, 0, width, height);
   ctx.font = "11px ui-monospace, SFMono-Regular, Consolas, monospace";
   ctx.textBaseline = "middle";
-  for (const value of tickValues()) {
+  for (const value of tickValues(width)) {
     const x = xFor(value, width);
     ctx.strokeStyle = colors.grid;
     ctx.beginPath();
@@ -779,7 +787,7 @@ function drawStage(canvas: HTMLCanvasElement, stage: Stage): void {
     ctx.fillText(`S${layout.id}`, 6, layout.top + 16);
   }
 
-  for (const value of tickValues()) {
+  for (const value of tickValues(width)) {
     const x = xFor(value, width);
     ctx.strokeStyle = colors.grid;
     ctx.beginPath();
@@ -946,9 +954,18 @@ function showTooltip(kernel: KernelEvent, event: PointerEvent): void {
   tooltip.style.top = `${Math.min(event.clientY + 16, window.innerHeight - 90)}px`;
 }
 
+function clearInspector(): void {
+  selected = null;
+  inspector.textContent = "Click any kernel bar to see its name, duration, device, and stream.";
+  inspector.className = "inspector-empty";
+  element<HTMLElement>("#clear-kernel").classList.add("hidden");
+  requestDraw();
+}
+
 function inspect(kernel: KernelEvent): void {
   if (!trace) return;
   selected = kernel;
+  element<HTMLElement>("#clear-kernel").classList.remove("hidden");
   inspector.className = selection ? "inspector-grid inspector-span" : "inspector-grid";
   inspector.replaceChildren();
   const fields: [string, string][] = [
@@ -985,6 +1002,14 @@ type TimelineDrag =
 
 function bindTimelineEvents(canvas: HTMLCanvasElement, stage?: Stage): void {
   let drag: TimelineDrag | null = null;
+  // Touch pointers on this canvas, for pinch zoom. Vertical swipes are left to
+  // the browser (touch-action: pan-y) so the page still scrolls.
+  const touches = new Map<number, number>();
+  let pinch: { distance: number; anchor: number; span: number } | null = null;
+  const touchSpread = (): { center: number; distance: number } => {
+    const [a, b] = [...touches.values()];
+    return { center: (a + b) / 2, distance: Math.max(24, Math.abs(a - b)) };
+  };
   const timeAt = (event: PointerEvent): number => {
     const rect = canvas.getBoundingClientRect();
     const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
@@ -1009,17 +1034,28 @@ function bindTimelineEvents(canvas: HTMLCanvasElement, stage?: Stage): void {
     if (event.button !== 0 && event.button !== 1) return;
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
-    if (event.shiftKey || event.button === 1) {
+    const isTouch = event.pointerType === "touch";
+    const edgeSlop = isTouch ? 20 : 8;
+    if (isTouch) {
+      touches.set(event.pointerId, event.clientX);
+      if (touches.size === 2) {
+        const { center, distance } = touchSpread();
+        const span = viewEndMs - viewStartMs;
+        pinch = { distance, span,
+          anchor: viewStartMs + (center - rect.left) / rect.width * span };
+        drag = null;
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
+      if (touches.size > 2) return;
+    }
+    const nearStart = selection ? Math.abs(x - xFor(selection.start, rect.width)) : Infinity;
+    const nearEnd = selection ? Math.abs(x - xFor(selection.end, rect.width)) : Infinity;
+    if (Math.min(nearStart, nearEnd) <= edgeSlop) {
+      drag = { mode: nearStart <= nearEnd ? "start" : "end" };
+    } else if (event.shiftKey || event.button === 1 || (isTouch && !touchMeasure)) {
       drag = { mode: "pan", x: event.clientX, start: viewStartMs,
         end: viewEndMs, moved: false };
-    } else if (selection) {
-      const startDistance = Math.abs(x - xFor(selection.start, rect.width));
-      const endDistance = Math.abs(x - xFor(selection.end, rect.width));
-      if (Math.min(startDistance, endDistance) <= 8) {
-        drag = { mode: startDistance <= endDistance ? "start" : "end" };
-      } else {
-        drag = { mode: "new", x: event.clientX, anchor: timeAt(event), moved: false };
-      }
     } else {
       drag = { mode: "new", x: event.clientX, anchor: timeAt(event), moved: false };
     }
@@ -1031,6 +1067,15 @@ function bindTimelineEvents(canvas: HTMLCanvasElement, stage?: Stage): void {
     }
   });
   canvas.addEventListener("pointermove", (event) => {
+    if (touches.has(event.pointerId)) touches.set(event.pointerId, event.clientX);
+    if (pinch && touches.size === 2) {
+      const rect = canvas.getBoundingClientRect();
+      const { center, distance } = touchSpread();
+      const span = pinch.span * pinch.distance / distance;
+      const start = pinch.anchor - (center - rect.left) / rect.width * span;
+      setView(start, start + span);
+      return;
+    }
     if (drag) {
       if (drag.mode === "pan") {
         const delta = event.clientX - drag.x;
@@ -1078,8 +1123,16 @@ function bindTimelineEvents(canvas: HTMLCanvasElement, stage?: Stage): void {
     if (kernel) showTooltip(kernel, event);
     else tooltip.classList.add("hidden");
   });
+  const releaseTouch = (event: PointerEvent): boolean => {
+    if (!touches.delete(event.pointerId) || !pinch) return false;
+    // Lifting one finger of a pinch must not turn the other into a tap or pan.
+    if (touches.size < 2) pinch = null;
+    drag = null;
+    return true;
+  };
   canvas.addEventListener("pointerup", (event) => {
-    if (drag?.mode === "new" && !drag.moved) {
+    if (releaseTouch(event)) return;
+    if ((drag?.mode === "new" || drag?.mode === "pan") && !drag.moved) {
       if (selection) {
         const time = timeAt(event);
         if (time < selection.start || time > selection.end) setSelection(null);
@@ -1092,7 +1145,8 @@ function bindTimelineEvents(canvas: HTMLCanvasElement, stage?: Stage): void {
     drag = null;
     canvas.style.cursor = "crosshair";
   });
-  canvas.addEventListener("pointercancel", () => {
+  canvas.addEventListener("pointercancel", (event) => {
+    releaseTouch(event);
     drag = null;
     canvas.style.cursor = "crosshair";
   });
@@ -1135,6 +1189,12 @@ element<HTMLElement>(".viewer-card").addEventListener("wheel", (event) => {
   }
 }, { capture: true, passive: false });
 element<HTMLButtonElement>("#clear-selection").addEventListener("click", () => setSelection(null));
+element<HTMLButtonElement>("#clear-kernel").addEventListener("click", clearInspector);
+const measureMode = element<HTMLButtonElement>("#measure-mode");
+measureMode.addEventListener("click", () => {
+  touchMeasure = !touchMeasure;
+  measureMode.setAttribute("aria-pressed", String(touchMeasure));
+});
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && selection) setSelection(null);
 });

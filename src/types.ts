@@ -24,4 +24,5 @@ export interface TraceData {
 
 export type WorkerResponse =
   | { type: "loaded"; trace: TraceData }
+  | { type: "progress"; message: string }
   | { type: "error"; message: string };

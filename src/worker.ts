@@ -1,6 +1,7 @@
 import initSqlJs, { type Database } from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import type { KernelEvent, Stage, TraceData, WorkerResponse } from "./types";
+import { unpack } from "./unpack";
 
 function scalar(db: Database, sql: string): unknown {
   const result = db.exec(sql);
@@ -111,10 +112,14 @@ function readTrace(db: Database): TraceData {
   };
 }
 
-self.onmessage = async (event: MessageEvent<{ buffer: ArrayBuffer }>) => {
+self.onmessage = async (event: MessageEvent<{ buffer: ArrayBuffer; name: string }>) => {
   try {
+    const bytes = await unpack(new Uint8Array(event.data.buffer), event.data.name, (message) => {
+      self.postMessage({ type: "progress", message } satisfies WorkerResponse);
+    });
+    self.postMessage({ type: "progress", message: "Reading SQLite…" } satisfies WorkerResponse);
     const SQL = await initSqlJs({ locateFile: () => wasmUrl });
-    const db = new SQL.Database(new Uint8Array(event.data.buffer));
+    const db = new SQL.Database(bytes);
     try {
       const trace = readTrace(db);
       self.postMessage({ type: "loaded", trace } satisfies WorkerResponse);
