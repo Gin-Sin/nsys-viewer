@@ -28,72 +28,75 @@ app.innerHTML = `
       </section>
 
       <section id="workspace" class="workspace hidden" aria-label="Trace timeline">
-        <div class="workspace-heading">
-          <div class="trace-heading">
-            <strong id="file-title" tabindex="0" title="Double-click to rename">—</strong>
-            <input id="title-input" class="title-input hidden" aria-label="Trace title" maxlength="200" />
-            <button id="rename-title" class="button button-subtle" type="button">Rename</button>
-            <button id="reset-title" class="button button-subtle hidden" type="button" title="Use the original filename">Reset title</button>
-            <span id="trace-summary">—</span>
-          </div>
-          <div class="trace-stats"><span><strong id="kernel-count">—</strong> kernels</span><span><strong id="device-count">—</strong> GPUs</span><span><strong id="trace-span">—</strong> span</span></div>
-        </div>
-
-        <div class="viewer-card">
-          <div class="toolbar">
-            <div class="toolbar-group">
-              <span class="toolbar-label">Timeline</span>
-              <button id="zoom-out" class="icon-button" type="button" title="Zoom out">−</button>
-              <button id="zoom-in" class="icon-button" type="button" title="Zoom in">+</button>
-              <button id="fit-view" class="button button-subtle" type="button">Fit</button>
-              <button id="measure-mode" class="button button-subtle touch-only" type="button" aria-pressed="false" title="Drag to measure instead of pan">Measure</button>
-              <span id="view-range" class="view-range">—</span>
-              <span id="selection-summary" class="selection-summary hidden">
-                <strong id="selection-duration">—</strong>
-                <span id="selection-bounds">—</span>
-                <button id="clear-selection" type="button" aria-label="Clear time selection" title="Clear time selection">×</button>
-              </span>
+        <div class="timeline-pane">
+          <div class="workspace-heading">
+            <div class="trace-heading">
+              <strong id="file-title" tabindex="0" title="Double-click to rename">—</strong>
+              <input id="title-input" class="title-input hidden" aria-label="Trace title" maxlength="200" />
+              <button id="rename-title" class="button button-subtle" type="button">Rename</button>
+              <button id="reset-title" class="button button-subtle hidden" type="button" title="Use the original filename">Reset title</button>
+              <span id="trace-summary">—</span>
             </div>
-            <div class="toolbar-group toolbar-right">
-              <label class="search-box"><span aria-hidden="true">⌕</span><input id="kernel-search" type="search" placeholder="Find kernel" aria-label="Find kernel" /></label>
+            <div class="trace-stats"><span><strong id="kernel-count">—</strong> kernels</span><span><strong id="device-count">—</strong> GPUs</span><span><strong id="trace-span">—</strong> span</span></div>
+          </div>
+
+          <div class="viewer-card">
+            <div class="toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">Timeline</span>
+                <button id="zoom-out" class="icon-button" type="button" title="Zoom out">−</button>
+                <button id="zoom-in" class="icon-button" type="button" title="Zoom in">+</button>
+                <button id="fit-view" class="button button-subtle" type="button">Fit</button>
+                <button id="measure-mode" class="button button-subtle touch-only" type="button" aria-pressed="false" title="Drag to measure instead of pan">Measure</button>
+                <span id="view-range" class="view-range">—</span>
+                <span id="selection-summary" class="selection-summary hidden">
+                  <strong id="selection-duration">—</strong>
+                  <span id="selection-bounds">—</span>
+                  <button id="clear-selection" type="button" aria-label="Clear time selection" title="Clear time selection">×</button>
+                </span>
+              </div>
+              <div class="toolbar-group toolbar-right">
+                <label class="search-box"><span aria-hidden="true">⌕</span><input id="kernel-search" type="search" placeholder="Find kernel" aria-label="Find kernel" /></label>
+              </div>
             </div>
-          </div>
 
-          <div class="timeline-head">
-            <div class="stage-column-head">DEVICES</div>
-            <canvas id="axis-canvas" class="axis-canvas" aria-label="Time axis"></canvas>
+            <div class="timeline-head">
+              <div class="stage-column-head">DEVICES</div>
+              <canvas id="axis-canvas" class="axis-canvas" aria-label="Time axis"></canvas>
+            </div>
+            <div id="stage-rows" class="stage-rows"></div>
+            <div class="timeline-footer"><span class="pointer-only">Drag to measure · drag either edge to adjust · click elsewhere on the timeline or press Esc to clear · Shift+drag or horizontal scroll to pan · pinch or +/− to zoom</span><span class="touch-only">Swipe sideways to pan · pinch to zoom · tap a kernel for details · turn on Measure to drag out a span, then drag its edges to adjust</span></div>
           </div>
-          <div id="stage-rows" class="stage-rows"></div>
-          <div class="timeline-footer"><span class="pointer-only">Drag to measure · drag either edge to adjust · click elsewhere on the timeline or press Esc to clear · Shift+drag or horizontal scroll to pan · pinch or +/− to zoom</span><span class="touch-only">Swipe sideways to pan · pinch to zoom · tap a kernel for details · turn on Measure to drag out a span, then drag its edges to adjust</span></div>
         </div>
+        <div class="detail-pane">
+          <div class="inspector-card">
+            <div class="inspector-title">Kernel details<button id="clear-kernel" class="inspector-close hidden" type="button" aria-label="Clear kernel details" title="Clear kernel details">×</button></div>
+            <div id="inspector-content" class="inspector-empty">Click any kernel bar to see its name, duration, device, and stream.</div>
+          </div>
 
-        <div class="inspector-card">
-          <div class="inspector-title">Kernel details<button id="clear-kernel" class="inspector-close hidden" type="button" aria-label="Clear kernel details" title="Clear kernel details">×</button></div>
-          <div id="inspector-content" class="inspector-empty">Click any kernel bar to see its name, duration, device, and stream.</div>
+          <section class="breakdown-card" aria-label="Kernel breakdown">
+            <div class="breakdown-heading">
+              <strong id="breakdown-title">Kernel breakdown · full trace</strong>
+              <label>Device <select id="breakdown-device" aria-label="Breakdown device"></select></label>
+            </div>
+            <p id="breakdown-note" class="breakdown-note"></p>
+            <div class="breakdown-scroll">
+              <table class="breakdown-table">
+                <thead><tr>
+                  <th><button type="button" data-sort="name">Kernel <span></span></button></th>
+                  <th><button type="button" data-sort="count">Calls <span></span></button></th>
+                  <th><button type="button" data-sort="gpuMs">GPU time <span></span></button></th>
+                  <th class="span-column hidden"><button type="button" data-sort="spanShare">Span % <span></span></button></th>
+                  <th><button type="button" data-sort="gpuShare">GPU share <span></span></button></th>
+                  <th><button type="button" data-sort="avgMs">Avg <span></span></button></th>
+                  <th><button type="button" data-sort="wallMs">Wall coverage <span></span></button></th>
+                  <th><button type="button" data-sort="wallShare">Wall % <span></span></button></th>
+                </tr></thead>
+                <tbody id="breakdown-rows"></tbody>
+              </table>
+            </div>
+          </section>
         </div>
-
-        <section class="breakdown-card" aria-label="Kernel breakdown">
-          <div class="breakdown-heading">
-            <strong id="breakdown-title">Kernel breakdown · full trace</strong>
-            <label>Device <select id="breakdown-device" aria-label="Breakdown device"></select></label>
-          </div>
-          <p id="breakdown-note" class="breakdown-note"></p>
-          <div class="breakdown-scroll">
-            <table class="breakdown-table">
-              <thead><tr>
-                <th><button type="button" data-sort="name">Kernel <span></span></button></th>
-                <th><button type="button" data-sort="count">Calls <span></span></button></th>
-                <th><button type="button" data-sort="gpuMs">GPU time <span></span></button></th>
-                <th class="span-column hidden"><button type="button" data-sort="spanShare">Span % <span></span></button></th>
-                <th><button type="button" data-sort="gpuShare">GPU share <span></span></button></th>
-                <th><button type="button" data-sort="avgMs">Avg <span></span></button></th>
-                <th><button type="button" data-sort="wallMs">Wall coverage <span></span></button></th>
-                <th><button type="button" data-sort="wallShare">Wall % <span></span></button></th>
-              </tr></thead>
-              <tbody id="breakdown-rows"></tbody>
-            </table>
-          </div>
-        </section>
       </section>
     </main>
     <div id="toast" class="toast hidden" role="status"></div>
@@ -160,6 +163,10 @@ let breakdownSort: "name" | "count" | "gpuMs" | "gpuShare" | "avgMs" |
   "wallMs" | "wallShare" | "spanShare" = "gpuMs";
 let breakdownDescending = true;
 let touchMeasure = false;
+// Taller lanes on touch screens so kernels are big enough to tap.
+const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+const LANE = coarsePointer ? 32 : 24;
+const BAR = LANE - 4;
 
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
 let themeOverride: "light" | "dark" | null = null;
@@ -438,7 +445,7 @@ function loadTrace(data: TraceData): void {
     const layouts = stage.streamIds.map((id) => {
       const laneCount = kernelsByStream.get(stage.deviceId)?.get(id)?.activeEnds.length ?? 1;
       const layout = { id, top, laneCount };
-      top += laneCount * 24 + 6;
+      top += laneCount * LANE + 6;
       return layout;
     });
     layoutsByDevice.set(stage.deviceId, layouts);
@@ -622,7 +629,7 @@ function renderRows(): void {
     canvas.className = "stage-canvas";
     const layouts = layoutsByDevice.get(deviceId) ?? [];
     const last = layouts.at(-1);
-    const rowHeight = last ? last.top + last.laneCount * 24 + 8 : 38;
+    const rowHeight = last ? last.top + last.laneCount * LANE + 8 : 38;
     row.style.height = `${rowHeight}px`;
     canvas.style.height = `${rowHeight - 1}px`;
     canvas.setAttribute("aria-label", `${stageLabels[deviceId]} GPU timeline`);
@@ -781,10 +788,10 @@ function drawStage(canvas: HTMLCanvasElement, stage: Stage): void {
   const layouts = layoutsByDevice.get(stage.deviceId) ?? [];
   for (const [index, layout] of layouts.entries()) {
     ctx.fillStyle = index % 2 ? colors.alternate : colors.track;
-    ctx.fillRect(0, layout.top, width, layout.laneCount * 24 + 2);
+    ctx.fillRect(0, layout.top, width, layout.laneCount * LANE + 2);
     ctx.font = "10px ui-monospace, SFMono-Regular, Consolas, monospace";
     ctx.fillStyle = colors.text;
-    ctx.fillText(`S${layout.id}`, 6, layout.top + 16);
+    ctx.fillText(`S${layout.id}`, 6, layout.top + LANE / 2 + 4);
   }
 
   for (const value of tickValues(width)) {
@@ -811,32 +818,32 @@ function drawStage(canvas: HTMLCanvasElement, stage: Stage): void {
       const x1 = Math.min(width, xFor(kernel.endMs, width));
       const barWidth = Math.max(1, x1 - x0);
       const overlapLane = kernel.overlapLane ?? 0;
-      const top = layout.top + 3 + overlapLane * 24;
+      const top = layout.top + 3 + overlapLane * LANE;
       if (barWidth <= 1 && Math.floor(x0) === lastTinyPixel[overlapLane]) continue;
       if (barWidth <= 1) lastTinyPixel[overlapLane] = Math.floor(x0);
       const name = trace.names[kernel.nameId] ?? "";
       ctx.globalAlpha = term && !name.toLowerCase().includes(term) ? 0.13 : 0.92;
       ctx.fillStyle = kernelColors.get(kernel.nameId) ?? "#587f95";
-      ctx.fillRect(x0, top, barWidth, 20);
+      ctx.fillRect(x0, top, barWidth, BAR);
       if (barWidth >= 3 && ctx.globalAlpha > 0.5) {
         ctx.strokeStyle = colors.edge;
         ctx.lineWidth = 1;
-        ctx.strokeRect(x0 + 0.5, top + 0.5, barWidth - 1, 19);
+        ctx.strokeRect(x0 + 0.5, top + 0.5, barWidth - 1, BAR - 1);
       }
       if (barWidth >= 10 && ctx.globalAlpha > 0.5) {
         ctx.save();
         ctx.beginPath();
-        ctx.rect(x0 + 2, top, barWidth - 3, 20);
+        ctx.rect(x0 + 2, top, barWidth - 3, BAR);
         ctx.clip();
         ctx.fillStyle = "#fff";
-        ctx.fillText(name, x0 + 3, top + 10);
+        ctx.fillText(name, x0 + 3, top + BAR / 2);
         ctx.restore();
       }
       if (kernel === selected || kernel === hovered) {
         ctx.globalAlpha = 1;
         ctx.strokeStyle = kernel === selected ? colors.selected : colors.hover;
         ctx.lineWidth = 2;
-        ctx.strokeRect(x0 + 0.5, top + 0.5, Math.max(2, x1 - x0), 19);
+        ctx.strokeRect(x0 + 0.5, top + 0.5, Math.max(2, x1 - x0), BAR - 1);
       }
     }
   }
@@ -915,20 +922,30 @@ function hitKernel(stage: Stage, canvas: HTMLCanvasElement, event: PointerEvent)
   const rect = canvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  const time = viewStartMs + (x / rect.width) * (viewEndMs - viewStartMs);
+  const msPerPixel = (viewEndMs - viewStartMs) / rect.width;
+  const time = viewStartMs + x * msPerPixel;
+  // A fingertip is imprecise, so touches also pick up the nearest kernel
+  // within a few pixels when nothing lies directly under it.
+  const slop = (event.pointerType === "touch" ? 10 : 0) * msPerPixel;
   const layout = layoutsByDevice.get(stage.deviceId)?.find(
-    (item) => y >= item.top && y < item.top + item.laneCount * 24,
+    (item) => y >= item.top && y < item.top + item.laneCount * LANE,
   );
   if (!layout) return null;
-  const overlapLane = Math.floor((y - layout.top) / 24);
+  const overlapLane = Math.floor((y - layout.top) / LANE);
   const lane = kernelsByStream.get(stage.deviceId)?.get(layout.id);
   if (!lane) return null;
   let best: KernelEvent | null = null;
-  for (let i = firstVisible(lane, time); i < lane.events.length; i++) {
+  let bestDistance = Infinity;
+  for (let i = firstVisible(lane, time - slop); i < lane.events.length; i++) {
     const kernel = lane.events[i];
-    if (kernel.startMs > time) break;
-    if (kernel.endMs < time || kernel.overlapLane !== overlapLane) continue;
-    if (!best || kernel.endMs - kernel.startMs < best.endMs - best.startMs) best = kernel;
+    if (kernel.startMs > time + slop) break;
+    if (kernel.endMs < time - slop || kernel.overlapLane !== overlapLane) continue;
+    const distance = Math.max(0, kernel.startMs - time, time - kernel.endMs);
+    if (distance < bestDistance || (distance === bestDistance && best &&
+        kernel.endMs - kernel.startMs < best.endMs - best.startMs)) {
+      best = kernel;
+      bestDistance = distance;
+    }
   }
   return best;
 }

@@ -36,6 +36,8 @@ URL such as `https://<user>.github.io/<repo>/` and when previewed locally.
 
 On phones and tablets: swipe sideways on the timeline to pan, pinch to zoom, and tap a kernel for details (the details panel stays pinned to the bottom of the screen). Turn on **Measure** in the toolbar to drag out a span; drag its edges to adjust it. Vertical swipes scroll the page as usual. Row reordering is mouse-only.
 
+On foldables and tablets the layout adapts to each screen: the cover screen gets the phone layout; an unfolded screen keeps the full-width timeline and shows every breakdown column without sideways scrolling. Half-folded, the timeline and the details/breakdown move to opposite sides of the hinge and scroll independently — top/bottom in tabletop posture, left/right in book posture. This uses the [Viewport Segments API](https://developer.mozilla.org/en-US/docs/Web/API/Viewport_segments_API) (Chromium on Android foldables); other browsers fall back to the unfolded layout. On touch screens kernel lanes are taller and taps snap to the nearest kernel within a few pixels.
+
 Drag device rows to reorder them, or edit their labels. Drag across the timeline to measure a span; drag its edges to adjust it. Shift+drag or scroll horizontally to pan, and pinch or use +/− to zoom. Click a kernel for details. Row order and labels are saved locally in the browser.
 
 The browser tab title defaults to the SQLite filename. Double-click the trace heading or click **Rename** to set an alias; Enter or clicking away saves it, and Escape cancels. **Reset title** restores the filename. Aliases are saved locally per filename and file size.
