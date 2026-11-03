@@ -44,6 +44,8 @@ The browser tab title defaults to the SQLite filename. Double-click the trace he
 
 Measuring a span switches the kernel breakdown to that span. **Span %** is summed kernel time inside the selection divided by its duration; concurrent launches and multiple GPUs can exceed 100%. Kernels crossing either boundary contribute only their time inside the span. Calls count launches overlapping the selection, and Avg uses their clipped durations. Hover or click a kernel to see its individual contribution alongside its full duration. Clearing the selection restores the full-trace breakdown. Device and name filters still apply; searching does not change percentage denominators.
 
+Kernel details and the breakdown table explain what each kernel does. Tap a kernel bar, or tap a row in the breakdown, to see its category (matmul, attention, NCCL, KV cache, normalization, MoE, Triton…) and a plain-language summary. The name is also decoded where possible: dtype, GPU architecture, GEMM tile size, NCCL algorithm and protocol, and the ops fused into a torch.compile kernel. Explanations are pattern-matched from the name offline (`src/explain.ts`), so they are best-effort and unknown custom kernels are marked as unrecognized.
+
 The breakdown groups exact kernel names. **GPU share** is summed kernel time divided by total kernel time for the selected GPUs. **Wall %** is the time covered by that kernel name divided by the full trace span. Kernel names can overlap, so Wall % does not add to 100% or represent removable latency.
 
 The viewer reads GPU kernel activity from Nsight Systems SQLite exports. CPU activity, NVTX, CUDA API calls, and memory operations are not shown. Nsight's SQLite schema may change between versions.

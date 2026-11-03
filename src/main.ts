@@ -1,6 +1,7 @@
 import "./style.css";
 import type { KernelEvent, Stage, TraceData, WorkerResponse } from "./types";
 import { overlapDuration, summarizeKernels, type KernelSummary, type TimeSpan } from "./breakdown";
+import { explainKernel } from "./explain";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing app root");
@@ -71,7 +72,7 @@ app.innerHTML = `
         <div class="detail-pane">
           <div class="inspector-card">
             <div class="inspector-title">Kernel details<button id="clear-kernel" class="inspector-close hidden" type="button" aria-label="Clear kernel details" title="Clear kernel details">×</button></div>
-            <div id="inspector-content" class="inspector-empty">Click any kernel bar to see its name, duration, device, and stream.</div>
+            <div id="inspector-content" class="inspector-empty">Click any kernel bar to see its name, duration, device, and stream, plus what the kernel does.</div>
           </div>
 
           <section class="breakdown-card" aria-label="Kernel breakdown">
@@ -163,6 +164,7 @@ let breakdownSort: "name" | "count" | "gpuMs" | "gpuShare" | "avgMs" |
   "wallMs" | "wallShare" | "spanShare" = "gpuMs";
 let breakdownDescending = true;
 let touchMeasure = false;
+let expandedKernel: string | null = null;
 // Taller lanes on touch screens so kernels are big enough to tap.
 const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
 const LANE = coarsePointer ? 32 : 24;
@@ -466,6 +468,7 @@ function loadTrace(data: TraceData): void {
   breakdownCache = new Map();
   breakdownSort = "gpuMs";
   breakdownDescending = true;
+  expandedKernel = null;
   breakdownDevice.replaceChildren(new Option("All GPUs", "all"));
   for (const stage of data.stages) {
     breakdownDevice.add(new Option(`GPU ${stage.deviceId}`, String(stage.deviceId)));
@@ -490,6 +493,47 @@ function kernelBreakdown(device: string): { rows: KernelSummary[]; totalGpuMs: n
 function percent(part: number, whole: number): string {
   const value = whole > 0 ? part / whole * 100 : 0;
   return `${value < 0.1 ? value.toFixed(2) : value.toFixed(1)}%`;
+}
+
+function explanationNode(name: string): HTMLElement {
+  const explanation = explainKernel(name);
+  const node = document.createElement("div");
+  node.className = "kernel-explain";
+  const head = document.createElement("div");
+  head.className = "explain-head";
+  const category = document.createElement("span");
+  category.className = "explain-category";
+  category.textContent = explanation.category;
+  head.append(category);
+  if (explanation.short !== name) {
+    const short = document.createElement("code");
+    short.textContent = explanation.short;
+    head.append(short);
+  }
+  for (const tag of explanation.tags) {
+    const chip = document.createElement("span");
+    chip.className = "explain-tag";
+    chip.textContent = tag;
+    head.append(chip);
+  }
+  const summary = document.createElement("p");
+  summary.textContent = explanation.summary;
+  node.append(head, summary);
+  if (explanation.details.length) {
+    const list = document.createElement("ul");
+    for (const detail of explanation.details) {
+      const item = document.createElement("li");
+      item.textContent = detail;
+      list.append(item);
+    }
+    node.append(list);
+  }
+  return node;
+}
+
+function toggleExplanation(name: string): void {
+  expandedKernel = expandedKernel === name ? null : name;
+  renderBreakdown();
 }
 
 function renderBreakdown(): void {
@@ -543,7 +587,35 @@ function renderBreakdown(): void {
       }
       tr.append(td);
     }
+    const expanded = row.name === expandedKernel;
+    tr.className = expanded ? "breakdown-row expanded" : "breakdown-row";
+    tr.tabIndex = 0;
+    tr.setAttribute("aria-expanded", String(expanded));
+    tr.addEventListener("click", () => toggleExplanation(row.name));
+    tr.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleExplanation(row.name);
+    });
     fragment.append(tr);
+    if (expanded) {
+      const detailRow = document.createElement("tr");
+      detailRow.className = "breakdown-detail";
+      const td = document.createElement("td");
+      td.colSpan = cells.length;
+      // Keep the text within the visible part of a horizontally scrolled table.
+      const body = document.createElement("div");
+      body.className = "breakdown-detail-body";
+      const scroller = breakdownRows.closest<HTMLElement>(".breakdown-scroll");
+      if (scroller?.clientWidth) body.style.maxWidth = `${scroller.clientWidth - 2}px`;
+      const fullName = document.createElement("div");
+      fullName.className = "explain-full-name";
+      fullName.textContent = row.name;
+      body.append(fullName, explanationNode(row.name));
+      td.append(body);
+      detailRow.append(td);
+      fragment.append(detailRow);
+    }
   }
   if (!filtered.length) {
     const tr = document.createElement("tr");
@@ -973,7 +1045,7 @@ function showTooltip(kernel: KernelEvent, event: PointerEvent): void {
 
 function clearInspector(): void {
   selected = null;
-  inspector.textContent = "Click any kernel bar to see its name, duration, device, and stream.";
+  inspector.textContent = "Click any kernel bar to see its name, duration, device, and stream, plus what the kernel does.";
   inspector.className = "inspector-empty";
   element<HTMLElement>("#clear-kernel").classList.add("hidden");
   requestDraw();
@@ -1009,6 +1081,12 @@ function inspect(kernel: KernelEvent): void {
     field.append(heading, content);
     inspector.append(field);
   }
+  const meaning = document.createElement("div");
+  meaning.className = "inspector-field inspector-meaning";
+  const meaningLabel = document.createElement("span");
+  meaningLabel.textContent = "WHAT IT IS";
+  meaning.append(meaningLabel, explanationNode(trace.names[kernel.nameId] ?? ""));
+  inspector.append(meaning);
   requestDraw();
 }
 

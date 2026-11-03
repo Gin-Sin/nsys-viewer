@@ -188,6 +188,21 @@ button { cursor: pointer; }
 .breakdown-table .kernel-name { text-align: left; text-overflow: ellipsis; }
 .breakdown-table .breakdown-empty { padding: 18px 10px; text-align: left; color: var(--muted); }
 .breakdown-table tbody tr:hover { background: var(--hover); }
+.breakdown-row { cursor: pointer; }
+.breakdown-row.expanded td { background: var(--hover); }
+.breakdown-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.breakdown-table tr.breakdown-detail td { position: static; overflow: visible; padding: 0; border-right: 0; text-align: left; white-space: normal; font: inherit; background: var(--raised); }
+.breakdown-detail-body { position: sticky; left: 0; padding: 9px 10px 11px; }
+.explain-full-name { margin-bottom: 8px; color: var(--mutedStrong); font: 11px ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.inspector-meaning { grid-column: 1 / -1; }
+.kernel-explain { color: var(--text); font-size: 12px; line-height: 1.45; }
+.kernel-explain p { margin: 6px 0 0; }
+.kernel-explain ul { margin: 5px 0 0; padding-left: 18px; color: var(--mutedStrong); }
+.kernel-explain li { margin-top: 2px; }
+.explain-head { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 7px; }
+.explain-head code { color: var(--mutedStrong); font: 11px ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.kernel-explain .explain-category { display: inline-block; margin: 0; padding: 1px 7px; border: 1px solid var(--accent); border-radius: 10px; color: var(--accent); font-size: 11px; font-weight: 600; }
+.kernel-explain .explain-tag { display: inline-block; margin: 0; padding: 1px 6px; border-radius: 10px; background: var(--hover); color: var(--mutedStrong); font-size: 10px; }
 .tooltip { position: fixed; z-index: 30; width: 315px; pointer-events: none; padding: 9px 10px; border: 1px solid var(--controlBorder); background: var(--tooltipBg); box-shadow: 0 4px 12px #0006; }
 .tooltip strong { display: block; overflow-wrap: anywhere; color: var(--text); font: 11px ui-monospace, Consolas, monospace; }
 .tooltip span { display: block; margin-top: 6px; color: var(--mutedStrong); font: 10px ui-monospace, Consolas, monospace; }
