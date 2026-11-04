@@ -17,8 +17,27 @@ function isTar(bytes: Uint8Array): boolean {
   return bytes.length >= 512 && startsWith(bytes, [0x75, 0x73, 0x74, 0x61, 0x72], 257);
 }
 
-function looksLikeSqliteName(name: string): boolean {
-  return /\.(sqlite|sqlite3|db)$/i.test(name);
+function isSpace(byte: number): boolean {
+  return byte === 0x20 || byte === 0x0a || byte === 0x0d || byte === 0x09;
+}
+
+export function firstNonSpace(bytes: Uint8Array, from = 0): number {
+  let index = from;
+  // Skip a UTF-8 byte order mark.
+  if (index === 0 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) index = 3;
+  while (index < bytes.length && isSpace(bytes[index])) index++;
+  return index;
+}
+
+/** True for a JSON object or array, which is how Chrome-trace files start. */
+export function isTraceJson(bytes: Uint8Array): boolean {
+  const index = firstNonSpace(bytes);
+  return bytes[index] === 0x7b || bytes[index] === 0x5b;
+}
+
+function looksLikeTraceName(name: string): boolean {
+  // Skip macOS resource forks (._name, __MACOSX/) that archives often carry.
+  return /\.(sqlite|sqlite3|db|json)$/i.test(name) && !/(^|\/)(\._|__MACOSX\/)/.test(name);
 }
 
 async function nativeDecompress(bytes: Uint8Array, format: string): Promise<Uint8Array | null> {
@@ -47,6 +66,10 @@ async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
   return ungzip(bytes);
 }
 
+function entryName(header: Uint8Array): string {
+  return new TextDecoder().decode(header.subarray(0, 100)).replace(/\0.*$/, "");
+}
+
 function extractTar(bytes: Uint8Array): Uint8Array {
   let fallback: Uint8Array | null = null;
   for (let offset = 0; offset + 512 <= bytes.length;) {
@@ -57,7 +80,7 @@ function extractTar(bytes: Uint8Array): Uint8Array {
     const type = String.fromCharCode(header[156] || 0x30);
     const body = bytes.subarray(offset + 512, offset + 512 + size);
     if (type === "0" || type === "\0") {
-      if (isSqlite(body)) return body;
+      if (isSqlite(body) || looksLikeTraceName(entryName(header))) return body;
       if (!fallback || body.length > fallback.length) fallback = body;
     }
     offset += 512 + Math.ceil(size / 512) * 512;
@@ -75,14 +98,14 @@ function extractZip(bytes: Uint8Array): Uint8Array {
     },
   });
   if (!entries.length) throw new Error("The zip archive does not contain any files.");
-  const chosen = entries.find((entry) => looksLikeSqliteName(entry.name))
+  const chosen = entries.find((entry) => looksLikeTraceName(entry.name))
     ?? entries.reduce((a, b) => (b.size > a.size ? b : a));
   const files = unzipSync(bytes, { filter: (file) => file.name === chosen.name });
   return files[chosen.name];
 }
 
 /**
- * Returns raw SQLite bytes from a plain, gzip, zstd, zip, or tar(.gz/.zst)
+ * Returns raw SQLite or trace JSON bytes from a plain, gzip, zstd, zip, or tar(.gz/.zst)
  * file. Formats are detected from magic bytes, not the file extension.
  */
 export async function unpack(
@@ -92,7 +115,7 @@ export async function unpack(
 ): Promise<Uint8Array> {
   let bytes = input;
   for (let depth = 0; depth < 3; depth++) {
-    if (isSqlite(bytes)) return bytes;
+    if (isSqlite(bytes) || isTraceJson(bytes)) return bytes;
     if (startsWith(bytes, [0x1f, 0x8b])) {
       progress("Decompressing gzip…");
       bytes = await gunzip(bytes);
@@ -113,9 +136,9 @@ export async function unpack(
       break;
     }
   }
-  if (isSqlite(bytes)) return bytes;
+  if (isSqlite(bytes) || isTraceJson(bytes)) return bytes;
   if (/\.(nsys-rep|qdrep)$/i.test(name)) {
     throw new Error("This is an .nsys-rep report. Convert it first: nsys export --type sqlite <file>.");
   }
-  throw new Error("Not an SQLite database. Open an Nsight SQLite export (optionally .gz, .zst, .zip, or .tar.gz).");
+  throw new Error("Not a trace. Open an Nsight SQLite export or a PyTorch profiler JSON trace (optionally .gz, .zst, .zip, or .tar.gz).");
 }

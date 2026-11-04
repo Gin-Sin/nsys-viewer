@@ -5,6 +5,18 @@ export interface KernelEvent {
   streamId: number;
   nameId: number;
   overlapLane?: number;
+  /** Index into TraceData.configs (PyTorch traces only). */
+  configId?: number;
+  /** Index into TraceData.ops: the CPU ops that launched the kernel. */
+  opId?: number;
+}
+
+export interface KernelConfig {
+  grid?: [number, number, number];
+  block?: [number, number, number];
+  registers?: number;
+  sharedMemory?: number;
+  occupancy?: number;
 }
 
 export interface Stage {
@@ -15,11 +27,14 @@ export interface Stage {
 }
 
 export interface TraceData {
+  format: "nsys" | "torch";
   schemaVersion: string;
   durationMs: number;
   stages: Stage[];
   names: Record<number, string>;
   kernels: KernelEvent[];
+  ops?: string[];
+  configs?: KernelConfig[];
 }
 
 export type WorkerResponse =

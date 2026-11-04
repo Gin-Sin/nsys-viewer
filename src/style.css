@@ -194,7 +194,8 @@ button { cursor: pointer; }
 .breakdown-table tr.breakdown-detail td { position: static; overflow: visible; padding: 0; border-right: 0; text-align: left; white-space: normal; font: inherit; background: var(--raised); }
 .breakdown-detail-body { position: sticky; left: 0; padding: 9px 10px 11px; }
 .explain-full-name { margin-bottom: 8px; color: var(--mutedStrong); font: 11px ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
-.inspector-meaning { grid-column: 1 / -1; }
+.inspector-meaning, .inspector-wide { grid-column: 1 / -1; }
+.inspector-wide strong { white-space: normal; overflow-wrap: anywhere; }
 .kernel-explain { color: var(--text); font-size: 12px; line-height: 1.45; }
 .kernel-explain p { margin: 6px 0 0; }
 .kernel-explain ul { margin: 5px 0 0; padding-left: 18px; color: var(--mutedStrong); }

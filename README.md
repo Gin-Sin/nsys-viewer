@@ -1,6 +1,6 @@
 # nsys-viewer
 
-A browser-only viewer for Nsight Systems SQLite exports. Open a local `.sqlite` file to inspect GPU kernel timelines and a per-kernel runtime breakdown. The file stays in your browser; there is no upload or backend.
+A browser-only viewer for Nsight Systems SQLite exports and PyTorch profiler traces. Open a local `.sqlite` or `.json` file to inspect GPU kernel timelines and a per-kernel runtime breakdown. The file stays in your browser; there is no upload or backend.
 
 Compressed exports open directly: `.gz`, `.zst`, `.zip`, `.tar.gz`, and `.tar.zst` are detected from the file contents and unpacked in the browser. This makes it practical to move traces to a phone, for example:
 
@@ -9,6 +9,18 @@ zstd -19 trace.sqlite        # or: gzip -9 trace.sqlite / zip trace.zip trace.sq
 ```
 
 xz, bzip2, and 7z are not supported.
+
+### PyTorch profiler traces
+
+Chrome-trace JSON from `torch.profiler` opens the same way, including the `*.pt.trace.json(.gz)` files written by `tensorboard_trace_handler`:
+
+```python
+with torch.profiler.profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
+    model(inputs)
+prof.export_chrome_trace("trace.json")
+```
+
+GPU kernels are drawn per device and stream. Kernel details also show the kernel's launch config (grid, block, registers, shared memory, estimated occupancy) and the CPU ops that were running when it was launched (for example `## forward ## › aten::linear › aten::addmm`), matched through the CUDA runtime call's correlation ID. Enable `ProfilerActivity.CPU` to get the launching ops. The JSON is scanned event by event instead of parsed whole, so traces of several hundred MB load; on a phone, prefer compressing them.
 
 ## Run locally
 
@@ -48,4 +60,4 @@ Kernel details and the breakdown table explain what each kernel does. Tap a kern
 
 The breakdown groups exact kernel names. **GPU share** is summed kernel time divided by total kernel time for the selected GPUs. **Wall %** is the time covered by that kernel name divided by the full trace span. Kernel names can overlap, so Wall % does not add to 100% or represent removable latency.
 
-The viewer reads GPU kernel activity from Nsight Systems SQLite exports. CPU activity, NVTX, CUDA API calls, and memory operations are not shown. Nsight's SQLite schema may change between versions.
+The viewer reads GPU kernel activity from Nsight Systems SQLite exports and PyTorch profiler traces. CPU activity (beyond the launching op in PyTorch traces), NVTX, CUDA API calls, and memory operations are not shown. Nsight's SQLite schema may change between versions.

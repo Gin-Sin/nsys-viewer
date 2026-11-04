@@ -49,5 +49,5 @@ test("extracts SQLite from tar.gz", async () => {
 test("explains unsupported inputs", async () => {
   await assert.rejects(unpack(new Uint8Array([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0, 1]), "a.xz"), /xz/);
   await assert.rejects(unpack(new Uint8Array(32), "a.nsys-rep"), /nsys export/);
-  await assert.rejects(unpack(new Uint8Array(32), "a.bin"), /Not an SQLite/);
+  await assert.rejects(unpack(new Uint8Array(32), "a.bin"), /Not a trace/);
 });

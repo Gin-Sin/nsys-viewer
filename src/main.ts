@@ -1,5 +1,5 @@
 import "./style.css";
-import type { KernelEvent, Stage, TraceData, WorkerResponse } from "./types";
+import type { KernelConfig, KernelEvent, Stage, TraceData, WorkerResponse } from "./types";
 import { overlapDuration, summarizeKernels, type KernelSummary, type TimeSpan } from "./breakdown";
 import { explainKernel } from "./explain";
 
@@ -23,9 +23,9 @@ app.innerHTML = `
     <main>
       <section id="empty-state" class="empty-state" aria-label="Open a trace">
         <h1>Open a trace</h1>
-        <p>Drop an Nsight Systems SQLite export here, or choose a file.<br />Compressed files (.gz, .zst, .zip, .tar.gz) work too.</p>
+        <p>Drop an Nsight Systems SQLite export or a PyTorch profiler trace (.json) here, or choose a file.<br />Compressed files (.gz, .zst, .zip, .tar.gz) work too.</p>
         <button id="drop-button" class="button" type="button">Choose file…</button>
-        <small>The database is read in this browser tab.</small>
+        <small>The file is read in this browser tab.</small>
       </section>
 
       <section id="workspace" class="workspace hidden" aria-label="Trace timeline">
@@ -389,7 +389,7 @@ resetTitle.addEventListener("click", () => {
 async function openFile(file: File): Promise<void> {
   element<HTMLButtonElement>("#open-button").disabled = true;
   announce(`Opening ${file.name} locally…`);
-  // Title the trace after the SQLite file, not its compressed wrapper.
+  // Title the trace after the trace file, not its compressed wrapper.
   const name = file.name.replace(/\.(tar\.gz|tgz|tar\.zst|tzst|tar|gz|zst|zstd|zip)$/i, "") || file.name;
   pendingFile = { key: `${file.name}:${file.size}`, name };
   try {
@@ -460,7 +460,7 @@ function loadTrace(data: TraceData): void {
   emptyState.classList.add("hidden");
   workspace.classList.remove("hidden");
   element<HTMLElement>("#trace-summary").textContent =
-    `Nsight SQLite schema ${data.schemaVersion} · parsed entirely in this browser`;
+    `${data.format === "torch" ? "PyTorch profiler trace" : `Nsight SQLite schema ${data.schemaVersion}`} · parsed entirely in this browser`;
   element<HTMLElement>("#kernel-count").textContent = data.kernels.length.toLocaleString();
   element<HTMLElement>("#device-count").textContent = String(data.stages.length);
   element<HTMLElement>("#trace-span").textContent = formatTime(data.durationMs);
@@ -1051,6 +1051,19 @@ function clearInspector(): void {
   requestDraw();
 }
 
+function formatConfig(config: KernelConfig): string {
+  const parts: string[] = [];
+  if (config.grid) parts.push(`grid ${config.grid.join("×")}`);
+  if (config.block) parts.push(`block ${config.block.join("×")}`);
+  if (config.registers != null) parts.push(`${config.registers} regs`);
+  if (config.sharedMemory != null) {
+    const bytes = config.sharedMemory;
+    parts.push(`${bytes >= 1024 ? `${+(bytes / 1024).toFixed(1)} KB` : `${bytes} B`} smem`);
+  }
+  if (config.occupancy != null) parts.push(`${config.occupancy}% occupancy`);
+  return parts.join(" · ");
+}
+
 function inspect(kernel: KernelEvent): void {
   if (!trace) return;
   selected = kernel;
@@ -1086,6 +1099,25 @@ function inspect(kernel: KernelEvent): void {
   const meaningLabel = document.createElement("span");
   meaningLabel.textContent = "WHAT IT IS";
   meaning.append(meaningLabel, explanationNode(trace.names[kernel.nameId] ?? ""));
+  // PyTorch traces also record the launch config and the launching CPU ops.
+  const config = kernel.configId == null ? undefined : trace.configs?.[kernel.configId];
+  const ops = kernel.opId == null ? undefined : trace.ops?.[kernel.opId];
+  const wide: [string, string | undefined][] = [
+    ["LAUNCHED BY", ops],
+    ["LAUNCH CONFIG", config && formatConfig(config)],
+  ];
+  for (const [label, value] of wide) {
+    if (!value) continue;
+    const field = document.createElement("div");
+    field.className = "inspector-field inspector-wide";
+    const heading = document.createElement("span");
+    heading.textContent = label;
+    const content = document.createElement("strong");
+    content.textContent = value;
+    content.title = value;
+    field.append(heading, content);
+    inspector.append(field);
+  }
   inspector.append(meaning);
   requestDraw();
 }

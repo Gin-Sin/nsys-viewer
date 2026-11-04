@@ -1,7 +1,8 @@
 import initSqlJs, { type Database } from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import type { KernelEvent, Stage, TraceData, WorkerResponse } from "./types";
-import { unpack } from "./unpack";
+import { readTorchTrace } from "./torch";
+import { isTraceJson, unpack } from "./unpack";
 
 function scalar(db: Database, sql: string): unknown {
   const result = db.exec(sql);
@@ -104,6 +105,7 @@ function readTrace(db: Database): TraceData {
   }
 
   return {
+    format: "nsys",
     schemaVersion,
     durationMs: (endNs - startNs) / 1e6,
     stages,
@@ -114,10 +116,16 @@ function readTrace(db: Database): TraceData {
 
 self.onmessage = async (event: MessageEvent<{ buffer: ArrayBuffer; name: string }>) => {
   try {
-    const bytes = await unpack(new Uint8Array(event.data.buffer), event.data.name, (message) => {
+    const progress = (message: string) => {
       self.postMessage({ type: "progress", message } satisfies WorkerResponse);
-    });
-    self.postMessage({ type: "progress", message: "Reading SQLite…" } satisfies WorkerResponse);
+    };
+    const bytes = await unpack(new Uint8Array(event.data.buffer), event.data.name, progress);
+    if (isTraceJson(bytes)) {
+      progress("Reading trace…");
+      self.postMessage({ type: "loaded", trace: readTorchTrace(bytes, progress) } satisfies WorkerResponse);
+      return;
+    }
+    progress("Reading SQLite…");
     const SQL = await initSqlJs({ locateFile: () => wasmUrl });
     const db = new SQL.Database(bytes);
     try {
