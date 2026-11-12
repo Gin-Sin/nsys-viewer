@@ -996,9 +996,10 @@ function hitKernel(stage: Stage, canvas: HTMLCanvasElement, event: PointerEvent)
   const y = event.clientY - rect.top;
   const msPerPixel = (viewEndMs - viewStartMs) / rect.width;
   const time = viewStartMs + x * msPerPixel;
-  // A fingertip is imprecise, so touches also pick up the nearest kernel
-  // within a few pixels when nothing lies directly under it.
-  const slop = (event.pointerType === "touch" ? 10 : 0) * msPerPixel;
+  // Zoomed out, most kernels are far narrower than a pixel and the 1px bars
+  // drawn for them would be unclickable, so pick the nearest kernel within a
+  // few pixels. A fingertip is less precise than a mouse, so touches get more.
+  const slop = (event.pointerType === "touch" ? 10 : 4) * msPerPixel;
   const layout = layoutsByDevice.get(stage.deviceId)?.find(
     (item) => y >= item.top && y < item.top + item.laneCount * LANE,
   );
@@ -1047,6 +1048,7 @@ function clearInspector(): void {
   selected = null;
   inspector.textContent = "Click any kernel bar to see its name, duration, device, and stream, plus what the kernel does.";
   inspector.className = "inspector-empty";
+  element<HTMLElement>(".inspector-card").classList.remove("has-kernel");
   element<HTMLElement>("#clear-kernel").classList.add("hidden");
   requestDraw();
 }
@@ -1067,6 +1069,7 @@ function formatConfig(config: KernelConfig): string {
 function inspect(kernel: KernelEvent): void {
   if (!trace) return;
   selected = kernel;
+  element<HTMLElement>(".inspector-card").classList.add("has-kernel");
   element<HTMLElement>("#clear-kernel").classList.remove("hidden");
   inspector.className = selection ? "inspector-grid inspector-span" : "inspector-grid";
   inspector.replaceChildren();

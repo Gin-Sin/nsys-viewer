@@ -162,6 +162,8 @@ button { cursor: pointer; }
 .timeline-footer { padding: 6px 9px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
 
 .inspector-card { min-height: 92px; margin-top: 8px; padding: 9px 10px; }
+/* Keep the details in view when the timeline is taller than the window. */
+.inspector-card.has-kernel { position: sticky; bottom: 0; z-index: 5; max-height: 40vh; overflow: auto; box-shadow: 0 -4px 12px #0002; }
 .inspector-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; color: var(--mutedStrong); font-size: 12px; font-weight: 600; }
 .inspector-close { border: 0; background: transparent; color: var(--mutedStrong); font-size: 18px; line-height: 16px; padding: 0 4px; }
 .inspector-close:hover { color: var(--text); }
